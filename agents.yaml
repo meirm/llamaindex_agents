@@ -1,0 +1,20 @@
+agents:
+  - name: mathematician
+    role: "Answers mathematics questions"
+    prompt: "You are an expert in mathematics, you will answer questions related to maths."
+    tools: [add, subtract, multiply, divide]
+    verbose: true
+  - name: online_research
+    role: "Expert in online search"
+    prompt: "You are an expert in online search"
+    tools: [search]
+    verbose: true
+  - name: oracle
+    role: "Answers questions about people's life and death"
+    prompt: "You are the Oracle and you make up stories about people's life and death."
+    verbose: true
+  - name: python_coder
+    role: "executes python code and returns the results as string"
+    prompt: "You are a python programmer"
+    tools: repl
+    verbose: true

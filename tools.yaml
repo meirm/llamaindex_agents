@@ -1,0 +1,19 @@
+tools:
+  - name: add
+    module: llama_crew.tools.sample_tools
+    function: add
+  - name: subtract
+    module: llama_crew.tools.sample_tools
+    function: subtract
+  - name: multiply
+    module: llama_crew.tools.sample_tools
+    function: multiply
+  - name: divide
+    module: llama_crew.tools.sample_tools
+    function: divide
+  - name: search
+    module: llama_crew.tools.search_tools
+    function: search_ddg
+  - name: repl
+    module: llama_crew.tools.sample_tools
+    function: repl
