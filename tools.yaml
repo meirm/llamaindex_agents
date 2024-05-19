@@ -17,3 +17,18 @@ tools:
   - name: repl
     module: llama_crew.tools.sample_tools
     function: repl
+  - name: wikipedia_summary
+    module: llama_crew.tools.sample_tools
+    function: get_wikipedia_summary
+  - name: wikipedia_page
+    module: llama_crew.tools.sample_tools
+    function: get_wikipedia_page
+  - name: get_top_cryptocurrencies_current_data
+    module: llama_crew.tools.sample_tools
+    function: get_top_cryptocurrencies
+  - name: get_forex_exchange_rates
+    module: llama_crew.tools.sample_tools
+    function: get_forex_exchange_rates
+  - name: get_stock_price
+    module: llama_crew.tools.sample_tools
+    function: get_stock_price

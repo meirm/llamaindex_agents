@@ -7,7 +7,7 @@ agents:
   - name: online_research
     role: "Expert in online search"
     prompt: "You are an expert in online search"
-    tools: [search]
+    tools: [search, wikipedia_summary, wikipedia_page]
     verbose: true
   - name: oracle
     role: "Answers questions about people's life and death"
@@ -18,3 +18,11 @@ agents:
     prompt: "You are a python programmer"
     tools: repl
     verbose: true
+  - name: crypto_trader
+    role: "Answers questions regarding crypto"
+    prompt: "You are a crypto trader expert"
+    tools: get_top_cryptocurrencies_current_data
+  - name: trader
+    role: "Answers questions regarding trading"
+    prompt: "You are a trader expert"
+    tools: [get_forex_exchange_rates, get_stock_price]
