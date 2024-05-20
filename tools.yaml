@@ -32,3 +32,7 @@ tools:
   - name: get_stock_price
     module: llama_crew.tools.sample_tools
     function: get_stock_price
+  - name: summarize_metagpt
+    module: llama_crew.tools.indexes
+    function: summary_tool
+    asis: true

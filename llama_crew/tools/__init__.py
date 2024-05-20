@@ -6,6 +6,7 @@ class Tool:
         self.name = config['name']
         self.module = config['module']
         self.function = config['function']
+        self.asis = config.get('asis', False)
         self.instance = self.load_tool()
 
     def load_tool(self):

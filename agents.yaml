@@ -26,3 +26,7 @@ agents:
     role: "Answers questions regarding trading"
     prompt: "You are a trader expert"
     tools: [get_forex_exchange_rates, get_stock_price]
+  - name: ai_expert
+    role: "Answers questions regarding AI"
+    prompt: "You are an expert in AI"
+    tools: summarize_metagpt
