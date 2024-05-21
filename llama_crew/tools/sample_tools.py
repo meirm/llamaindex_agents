@@ -83,7 +83,7 @@ def get_wikipedia_summary(page_title: str, language: str = 'en') -> str:
     Returns:
         str: The summary of the Wikipedia page if found, else an error message.
     """
-    wiki_wiki = wikipediaapi.Wikipedia(language)
+    wiki_wiki = wikipediaapi.Wikipedia(language, headers = {'User-Agent': 'MyCoolBot'})
     page = wiki_wiki.page(page_title)
 
     if page.exists():

@@ -11,7 +11,7 @@ nest_asyncio.apply()
 import yaml
 from llama_crew.tools import Tool, load_tools_config
 from llama_index.llms.openai import OpenAI
-from llama_crew.agents.agent import Orchestrator
+from llama_crew.agents.orchestrator import Orchestrator
 from llama_crew.agents.loader import load_agents
 
 # get current path of the file

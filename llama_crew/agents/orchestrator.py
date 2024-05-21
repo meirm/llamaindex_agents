@@ -1,21 +1,12 @@
 
 # https://github.com/run-llama/llama_index/blob/767de070b231fb328b6c0640c2e002c9c7af0a83/docs/docs/examples/agent/custom_agent.ipynb#L12
 
-from llama_index.core.agent import (
-    CustomSimpleAgentWorker,
-    Task,
-    AgentChatResponse,
-)
 from typing import List
 from llama_index.core.bridge.pydantic import Field, BaseModel
 from llama_index.core.output_parsers import PydanticOutputParser
 
-from llama_index.core.query_engine import RouterQueryEngine
-from llama_index.core.bridge.pydantic import PrivateAttr
 from typing import Dict, Any, Tuple, Optional
-from llama_index.core.selectors import PydanticSingleSelector
-from llama_crew.chat.utils import DEFAULT_PROMPT_STR
-from datetime import datetime, timedelta, timezone, time
+from datetime import datetime
 import json
 
 class Task(BaseModel):
@@ -115,79 +106,3 @@ class Orchestrator:
     def query_agent(self, agent_name, query):
         return self.agents[agent_name].query(query)
 
-
-class SimpleAgentWorker(CustomSimpleAgentWorker):
-    """Agent worker that adds a retry layer on top of a router.
-
-    Continues iterating until there's no errors / task is done.
-
-    """
-
-    prompt_str: str = Field(default=DEFAULT_PROMPT_STR)
-    role_prompt: str = Field(default="You are a AI assistant.")
-    max_iterations: int = Field(default=3)
-    __fields_set__: set =  {"prompt_str", "max_iterations","role_prompt"}
-    _router_query_engine: RouterQueryEngine = PrivateAttr()
-    
-
-    def __init__(self, **kwargs: Any) -> None:
-        """Initialize agent worker."""
-        self.tools = []
-        self.role_prompt = kwargs.get("role_prompt", "") + DEFAULT_PROMPT_STR
-        self._router_query_engine = RouterQueryEngine(
-            selector=PydanticSingleSelector.from_defaults(),
-            query_engine_tools=self.tools,
-            verbose=kwargs.get("verbose", False),
-        )
-        super().__init__(
-            tools=[],
-            **kwargs,
-        )
-
-    def _initialize_state(self, task: Task, **kwargs: Any) -> Dict[str, Any]:
-        """Initialize state."""
-        return {"count": 0, "current_reasoning": []}
-
-    def _run_step(
-        self, state: Dict[str, Any], task: Task, input: Optional[str] = None
-    ) -> Tuple[AgentChatResponse, bool]:
-        """Run step.
-
-        Returns:
-            Tuple of (agent_response, is_done)
-
-        """
-        if "new_input" not in state:
-            new_input = task.input
-        else:
-            new_input = state["new_input"]
-
-        if self.verbose:
-            print(f"> Querying engine: {new_input}")
-        
-        if self.verbose:
-            print(f"> Prompt: {self.role_prompt}")
-        response = self.llm.complete(self.role_prompt + new_input)
-
-            
-        # append to current reasoning
-        state["current_reasoning"].extend(
-            [("user", new_input), ("assistant", str(response))]
-        )
-        is_done = True
-        
-
-        if self.verbose:
-            print(f"> Question: {new_input}")
-            print(f"> Response: {response}")
-            # print(f"> Response eval: {response_eval.dict()}")
-
-        # return response
-        return AgentChatResponse(response=str(response)), is_done
-
-    def _finalize_task(self, state: Dict[str, Any], **kwargs) -> None:
-        """Finalize task."""
-        # nothing to finalize here
-        # this is usually if you want to modify any sort of
-        # internal state beyond what is set in `_initialize_state`
-        pass
