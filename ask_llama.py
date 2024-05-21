@@ -25,6 +25,7 @@ parser.add_argument('--model', type=str, default='gpt-3.5-turbo', help='The mode
 parser.add_argument('--api_key', type=str, default=OPENAI_API_KEY, help='The OpenAI API key')
 parser.add_argument('--api_base', type=str, default='https://api.openai.com/v1', help='The OpenAI API base URL')
 parser.add_argument('--agents_config', type=str, default=defaults["agents_config"], help='Path to the agents configuration file')
+parser.add_argument("--require_approval", action="store_true", help="Require approval for the plan before executing it")
 parser.add_argument("--verbose", action="store_true", help="Print out the responses from the agents and the evaluation of the responses.")
 parser.add_argument('query', nargs=argparse.REMAINDER, help='The query to send to the orchestrator')
 args = parser.parse_args()
@@ -37,6 +38,6 @@ agents_config = yaml.safe_load(open(args.agents_config, 'r'))
 
 agents = load_agents(llm, agents_config, all_tools)
 
-director = Orchestrator(llm, agents, agents_config=agents_config, verbose=args.verbose)
+director = Orchestrator(llm, agents, agents_config=agents_config, verbose=args.verbose, require_approval=args.require_approval)
 
 director.query(" ".join(args.query))
