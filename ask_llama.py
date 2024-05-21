@@ -26,13 +26,12 @@ parser.add_argument('--api_key', type=str, default=OPENAI_API_KEY, help='The Ope
 parser.add_argument('--api_base', type=str, default='https://api.openai.com/v1', help='The OpenAI API base URL')
 parser.add_argument('--agents_config', type=str, default=defaults["agents_config"], help='Path to the agents configuration file')
 parser.add_argument("--verbose", action="store_true", help="Print out the responses from the agents and the evaluation of the responses.")
-# The query to send to the orchestrator, take all the rest of the arguments as the query even when not enclosed in quotes
 parser.add_argument('query', nargs=argparse.REMAINDER, help='The query to send to the orchestrator')
 args = parser.parse_args()
 
 tools_config = load_tools_config(args.tools_config)
 all_tools = [Tool(config) for config in tools_config["tools"]]
-llm = OpenAI(model=args.model,api_key=args.api_key, api_base=args.api_base) #"http://localhost:1234/v1")
+llm = OpenAI(model=args.model,api_key=args.api_key, api_base=args.api_base)
 
 agents_config = yaml.safe_load(open(args.agents_config, 'r'))
 

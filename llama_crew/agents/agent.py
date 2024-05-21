@@ -6,20 +6,35 @@ from llama_index.core.agent import (
     Task,
     AgentChatResponse,
 )
+from typing import List
 from llama_index.core.bridge.pydantic import Field, BaseModel
+from llama_index.core.output_parsers import PydanticOutputParser
+
 from llama_index.core.query_engine import RouterQueryEngine
 from llama_index.core.bridge.pydantic import PrivateAttr
 from typing import Dict, Any, Tuple, Optional
 from llama_index.core.selectors import PydanticSingleSelector
 from llama_crew.chat.utils import DEFAULT_PROMPT_STR
 from datetime import datetime, timedelta, timezone, time
+import json
+
+class Task(BaseModel):
+    input: str
+    context: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    
+class Step(BaseModel):
+    agent: str
+    subtask: str
+    
+class Plan(BaseModel):
+    goal: str
+    steps: List[Step]
 class Orchestrator:
     system_prompt = (
         "DATE: {todays_date}\n\n"
         "You are the orchestrator. At your disposal, you have the following list of agents: {agents_list}\n"
         "Your job is to decompose the user's task into simple steps, each to be executed by a specific agent that you can choose from the agents list.\n"
-        "STEPS FORMAT:\n"
-        "<agent_name>: <subtask>; <agent_name>: <subtask>;\n\n"
         "FINALLY:\n"
         "Once you have the responses from the agents, you need to combine them into a coherent final answer to solve the task.\n\n"
         "TASK: {task}\n\n"
@@ -35,8 +50,10 @@ class Orchestrator:
         now = datetime.now()
         agent_list = [(agent["name"], agent["role"]) for agent in self.agents_config["agents"]]
         prompt = self.system_prompt.format(agents_list=agent_list,task=task, todays_date=now.strftime("%Y-%m-%d"))
-        steps = self.llm.complete(prompt)
-        steps = str(steps).strip().split(";")
+        response_format = PydanticOutputParser(Plan)
+        response = self.llm.complete(prompt + response_format.format_string)
+        steps = json.loads(str(response))["steps"]
+        steps = [f"{step['agent']}: {step['subtask']}" for step in steps]
         if self.verbose:
             print(f"Received the following task: {task}")
             print(f"Steps: [{steps}]")
