@@ -40,10 +40,10 @@ class Orchestrator:
             if step.strip() == "":
                 continue
             agent_name, agent_query = step.split(":", 1)
-            if self.verbose:
-                agent_prompt = "Given the User's task: {task}\n" + \
+            agent_prompt = "Given the User's task: {task}\n" + \
                                  "And the following query from the orchestrator: {query}\n" + \
                                     "Please provide a response to the query."
+            if self.verbose:    
                 print(f"Calling agent {agent_name} with the query: {agent_query}")
             response = self.query_agent(agent_name.strip(), agent_prompt.format(task=task, query=agent_query.strip()))
             if self.verbose:

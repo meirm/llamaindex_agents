@@ -29,7 +29,7 @@ args = parser.parse_args()
 
 tools_config = load_tools_config(args.tools_config)
 all_tools = [Tool(config) for config in tools_config["tools"]]
-llm = OpenAI(model="gpt-3.5-turbo")
+llm = OpenAI(model="gpt-3.5-turbo",api_key='banana', api_base="http://localhost:1234/v1")
 
 agents_config = yaml.safe_load(open(args.agents_config, 'r'))
 
