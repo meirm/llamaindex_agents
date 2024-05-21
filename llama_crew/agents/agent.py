@@ -13,7 +13,13 @@ from typing import Dict, Any, Tuple, Optional
 from llama_index.core.selectors import PydanticSingleSelector
 from llama_crew.chat.utils import DEFAULT_PROMPT_STR
 class Orchestrator:
-    system_prompt = "You are the orchestrator. Your job is to forward the user's request to the appropriate agent to fulfill the request. You can ask any of the agents: [{agents_list}] and forward the response to the user. Given the following question from the user:\n"
+    system_prompt = "You are the orchestrator, at your disposition you have the following list of agents: [{agents_list}]\n" + \
+    "Your job is to decompose the user's task into simple steps where each step is to be executed by a specific agent.\n"  + \
+    "STEPS FORMAT:\n<agent_name>:<subtask>;<agent_name>:<subtask>;\n" + \
+    "EXAMPLES:\nmathematician: What is the square root of 16?;\n" + \
+    "crypto_trader:Price of Bitcoin in USD;crypto_trader:FX rate USD to EUR;mathematician:Calculate price of BTC in EUR;\n" + \
+    "FINALLY:\nOnce you have the responses from the agents, you need to combine them into a coherent final answer.\n" + \
+    "TASK: {task}\n\n"
     
     def __init__(self, llm, agents, **kwargs):
         self.llm = llm
@@ -21,48 +27,47 @@ class Orchestrator:
         self.agents_config = kwargs.get("agents_config", {})
         self.verbose = kwargs.get("verbose", False)
         
-    def query(self, query):
-        prompt = self.system_prompt.format(agents_list=[(agent["name"], agent["role"]) for agent in self.agents_config["agents"]])
-        step = self.llm.complete(prompt + query + "\n\nRespond with either 'simple: agent_name: query' for a simple question or 'complex: steps' for a complex question where steps are the decomposed queries in the same format (agent: query).Each step should be separated by a semicolon and the steps should be ordered in the sequence they should be executed")
-        response_type, details = str(step).split(":", 1)
+    def query(self, task):
+        agent_list = [(agent["name"], agent["role"]) for agent in self.agents_config["agents"]]
+        prompt = self.system_prompt.format(agents_list=agent_list,task=task)
+        steps = self.llm.complete(prompt)
+        steps = str(steps).strip().split(";")
         if self.verbose:
-            print(f"Received the following query: {query}")
-            print(f"Response type: {response_type}")
-            print(f"Details: {details}")
-        if response_type.strip() == "simple":
-            agent_name, agent_query = details.split(":", 1)
+            print(f"Received the following task: {task}")
+            print(f"Steps: [{steps}]")
+        responses = []
+        for step in steps:
+            if step.strip() == "":
+                continue
+            agent_name, agent_query = step.split(":", 1)
             if self.verbose:
-                print(f"Forwarding the query to the agent {agent_name} with the query: {agent_query}")
-            response = self.query_agent(agent_name.strip(), agent_query.strip())
+                agent_prompt = "Given the User's task: {task}\n" + \
+                                 "And the following query from the orchestrator: {query}\n" + \
+                                    "Please provide a response to the query."
+                print(f"Calling agent {agent_name} with the query: {agent_query}")
+            response = self.query_agent(agent_name.strip(), agent_prompt.format(task=task, query=agent_query.strip()))
             if self.verbose:
                 print(f"Agent {agent_name} responded with: {response}")
-            combined_responses = str(response)
-            combined_response = self.combine_responses(query, combined_responses)
-            eval_response = self.eval_response(query, "orchestrator", query, combined_response)
-            if self.verbose:
-                print(f"Response evaluation: {eval_response}")
-            return combined_response, eval_response
-        
-        elif response_type.strip() == "complex":
-            steps = details.strip().split(";")
-            responses = []
-            for step in steps:
-                if step.strip() == "":
-                    continue
-                agent_name, agent_query = step.split(":", 1)
-                if self.verbose:
-                    print(f"Forwarding the query to the agent {agent_name} with the query: {agent_query}")
-                response = self.query_agent(agent_name.strip(), agent_query.strip())
-                if self.verbose:
-                    print(f"Agent {agent_name} responded with: {response}")
-                responses.append(response)
-            combined_responses = " ".join(str(responses))
-            combined_response = self.combine_responses(query, combined_responses)
-            eval_response = self.eval_response(query, "orchestrator", query, combined_response)
-            if self.verbose:
-                print(f"Response evaluation: {eval_response}")
-            return combined_response, eval_response
-        
+            responses.append(response)
+            if (self.can_stop(task, responses)):
+                break
+        combined_responses = " ".join(str(responses))
+        combined_response = self.combine_responses(task, combined_responses)
+        eval_response = self.eval_response(task, "orchestrator", task, combined_response)
+        if self.verbose:
+            print(f"Response evaluation: {eval_response}")
+        return combined_response, eval_response
+    
+    def can_stop(self, task, responses):
+        # Generic logic to determine if the orchestrator can stop querying agents based on the responses so far
+        prompt = "Given the following task from the user: {task}\n" + \
+                    "And the following responses from agents: {responses}\n" + \
+                    "Please determine if the orchestrator can stop querying agents.\n ANSWER: Yes/No"
+        response = self.llm.complete(prompt.format(task=task, responses=responses))
+        if "Yes" in str(response):
+            return True
+        return False
+    
     def combine_responses(self, original_query, responses):
         # Generic logic to combine responses from different agents based on the original query context
         system_prompt = f"Given the following original query from the user:\n{original_query}\n\n" \
