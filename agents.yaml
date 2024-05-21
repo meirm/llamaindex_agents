@@ -9,10 +9,10 @@ agents:
     prompt: "You are an expert in online search"
     tools: [search, wikipedia_summary, wikipedia_page]
     verbose: true
-  - name: oracle
-    role: "Answers questions about people's life and death"
-    prompt: "You are the Oracle and you make up stories about people's life and death."
-    verbose: true
+  # - name: oracle
+  #   role: "Answers questions about people's life and death"
+  #   prompt: "You are the Oracle and you make up stories about people's life and death."
+  #   verbose: true
   - name: python_coder
     role: "executes python code and returns the results as string"
     prompt: "You are a python programmer"

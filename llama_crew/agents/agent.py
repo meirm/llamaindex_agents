@@ -12,14 +12,18 @@ from llama_index.core.bridge.pydantic import PrivateAttr
 from typing import Dict, Any, Tuple, Optional
 from llama_index.core.selectors import PydanticSingleSelector
 from llama_crew.chat.utils import DEFAULT_PROMPT_STR
+from datetime import datetime, timedelta, timezone, time
 class Orchestrator:
-    system_prompt = "You are the orchestrator, at your disposition you have the following list of agents: [{agents_list}]\n" + \
-    "Your job is to decompose the user's task into simple steps where each step is to be executed by a specific agent.\n"  + \
-    "STEPS FORMAT:\n<agent_name>:<subtask>;<agent_name>:<subtask>;\n" + \
-    "EXAMPLES:\nmathematician: What is the square root of 16?;\n" + \
-    "crypto_trader:Price of Bitcoin in USD;crypto_trader:FX rate USD to EUR;mathematician:Calculate price of BTC in EUR;\n" + \
-    "FINALLY:\nOnce you have the responses from the agents, you need to combine them into a coherent final answer.\n" + \
-    "TASK: {task}\n\n"
+    system_prompt = (
+        "DATE: {todays_date}\n\n"
+        "You are the orchestrator. At your disposal, you have the following list of agents: {agents_list}\n"
+        "Your job is to decompose the user's task into simple steps, each to be executed by a specific agent that you can choose from the agents list.\n"
+        "STEPS FORMAT:\n"
+        "<agent_name>: <subtask>; <agent_name>: <subtask>;\n\n"
+        "FINALLY:\n"
+        "Once you have the responses from the agents, you need to combine them into a coherent final answer to solve the task.\n\n"
+        "TASK: {task}\n\n"
+        )
     
     def __init__(self, llm, agents, **kwargs):
         self.llm = llm
@@ -28,8 +32,9 @@ class Orchestrator:
         self.verbose = kwargs.get("verbose", False)
         
     def query(self, task):
+        now = datetime.now()
         agent_list = [(agent["name"], agent["role"]) for agent in self.agents_config["agents"]]
-        prompt = self.system_prompt.format(agents_list=agent_list,task=task)
+        prompt = self.system_prompt.format(agents_list=agent_list,task=task, todays_date=now.strftime("%Y-%m-%d"))
         steps = self.llm.complete(prompt)
         steps = str(steps).strip().split(";")
         if self.verbose:
@@ -40,9 +45,11 @@ class Orchestrator:
             if step.strip() == "":
                 continue
             agent_name, agent_query = step.split(":", 1)
-            agent_prompt = "Given the User's task: {task}\n" + \
-                                 "And the following query from the orchestrator: {query}\n" + \
-                                    "Please provide a response to the query."
+            agent_prompt = (
+                "Given the User's task: {task}\n"
+                "And the following query from the orchestrator: {query}\n"
+                "Please provide a response to the query."
+            )
             if self.verbose:    
                 print(f"Calling agent {agent_name} with the query: {agent_query}")
             response = self.query_agent(agent_name.strip(), agent_prompt.format(task=task, query=agent_query.strip()))
@@ -60,9 +67,12 @@ class Orchestrator:
     
     def can_stop(self, task, responses):
         # Generic logic to determine if the orchestrator can stop querying agents based on the responses so far
-        prompt = "Given the following task from the user: {task}\n" + \
-                    "And the following responses from agents: {responses}\n" + \
-                    "Please determine if the orchestrator can stop querying agents.\n ANSWER: Yes/No"
+        prompt = (
+            "Given the following task from the user: {task}\n"
+            "And the following responses from agents: {responses}\n"
+            "Please determine if the orchestrator can stop querying agents.\n"
+            "ANSWER: Yes/No"
+        )
         response = self.llm.complete(prompt.format(task=task, responses=responses))
         if "Yes" in str(response):
             return True
@@ -70,15 +80,20 @@ class Orchestrator:
     
     def combine_responses(self, original_query, responses):
         # Generic logic to combine responses from different agents based on the original query context
-        system_prompt = f"Given the following original query from the user:\n{original_query}\n\n" \
-                        f"And the following responses from agents:\n" \
-                        f"{responses}\n\n" \
-                        f"Please combine these responses into a coherent final answer."
+        system_prompt = (
+            f"Given the following original query from the user:\n{original_query}\n\n"
+            f"And the following responses from agents:\n{responses}\n\n"
+            "Please combine these responses into a coherent final answer."
+        )
         combined_response = self.llm.complete(system_prompt)
         return combined_response
         
     def eval_response(self, task, agent_name, query, response):
-        system_prompt = f"Given the following question from the user:\n{task}\n\nThe response from {agent_name} to the query {query} is:\n{response}\n\nPlease evaluate the response in the following format: 'has_error: new_question: explanation'"
+        system_prompt = (
+            f"Given the following question from the user:\n{task}\n\n"
+            f"The response from {agent_name} to the query {query} is:\n{response}\n\n"
+            "Please evaluate the response in the following format: 'has_error: new_question: explanation'"
+        )
         return self.llm.complete(system_prompt)
     
     def query_agent(self, agent_name, query):
