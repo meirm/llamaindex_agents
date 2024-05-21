@@ -114,7 +114,7 @@ import requests
 import json
 
 def get_top_cryptocurrencies(currency='usd', limit=10):
-    """Fetches top cryptocurrencies by price, volume, and market cap from CoinGecko.
+    """Fetches top cryptocurrencies by price, volume, and market cap from CoinGecko in USD.
     
     Args:
         currency (str): The currency to fetch data in (default is 'usd').

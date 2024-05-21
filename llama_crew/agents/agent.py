@@ -12,37 +12,72 @@ from llama_index.core.bridge.pydantic import PrivateAttr
 from typing import Dict, Any, Tuple, Optional
 from llama_index.core.selectors import PydanticSingleSelector
 from llama_crew.chat.utils import DEFAULT_PROMPT_STR
-
 class Orchestrator:
-    system_prompt = "You are the orchestrator. You job is to forward the user's request to the agent to follow answer the request. You can ask any of the agents: [{agents_list}] and forward the response to the user Given the follow question from the user:\n"
+    system_prompt = "You are the orchestrator. Your job is to forward the user's request to the appropriate agent to fulfill the request. You can ask any of the agents: [{agents_list}] and forward the response to the user. Given the following question from the user:\n"
+    
     def __init__(self, llm, agents, **kwargs):
         self.llm = llm
-        self.agents = agents
+        self.agents = agents #{agent["name"]: agent for agent in agents}
         self.agents_config = kwargs.get("agents_config", {})
         self.verbose = kwargs.get("verbose", False)
         
     def query(self, query):
-        prompt = self.system_prompt.format(agents_list=[(agent["name"],agent["role"]) for agent in self.agents_config["agents"]])
-        step = self.llm.complete( prompt + query +  "\n\nRespond with the name of the agent to call and the query to forward to the agent in the following format: 'agent_name: query'")
-        agent_name, agent_query = str(step).split(":")
+        prompt = self.system_prompt.format(agents_list=[(agent["name"], agent["role"]) for agent in self.agents_config["agents"]])
+        step = self.llm.complete(prompt + query + "\n\nRespond with either 'simple: agent_name: query' for a simple question or 'complex: steps' for a complex question where steps are the decomposed queries in the same format (agent: query).Each step should be separated by a semicolon and the steps should be ordered in the sequence they should be executed")
+        response_type, details = str(step).split(":", 1)
         if self.verbose:
-            print(f"Forwarding the query to the agent {agent_name} with the query: {agent_query}")
-        response = self.query_agent(agent_name.strip(), agent_query.strip())
-        if self.verbose:
-            print(f"Agent {agent_name} responded with: {response}")
-        eval_response = self.eval_response(query, agent_name.strip(), agent_query.strip(), response)
-        if self.verbose:
-            print(f"Response evaluation: {eval_response}")
-        return response, eval_response
+            print(f"Received the following query: {query}")
+            print(f"Response type: {response_type}")
+            print(f"Details: {details}")
+        if response_type.strip() == "simple":
+            agent_name, agent_query = details.split(":", 1)
+            if self.verbose:
+                print(f"Forwarding the query to the agent {agent_name} with the query: {agent_query}")
+            response = self.query_agent(agent_name.strip(), agent_query.strip())
+            if self.verbose:
+                print(f"Agent {agent_name} responded with: {response}")
+            combined_responses = str(response)
+            combined_response = self.combine_responses(query, combined_responses)
+            eval_response = self.eval_response(query, "orchestrator", query, combined_response)
+            if self.verbose:
+                print(f"Response evaluation: {eval_response}")
+            return combined_response, eval_response
         
-    
+        elif response_type.strip() == "complex":
+            steps = details.strip().split(";")
+            responses = []
+            for step in steps:
+                if step.strip() == "":
+                    continue
+                agent_name, agent_query = step.split(":", 1)
+                if self.verbose:
+                    print(f"Forwarding the query to the agent {agent_name} with the query: {agent_query}")
+                response = self.query_agent(agent_name.strip(), agent_query.strip())
+                if self.verbose:
+                    print(f"Agent {agent_name} responded with: {response}")
+                responses.append(response)
+            combined_responses = " ".join(str(responses))
+            combined_response = self.combine_responses(query, combined_responses)
+            eval_response = self.eval_response(query, "orchestrator", query, combined_response)
+            if self.verbose:
+                print(f"Response evaluation: {eval_response}")
+            return combined_response, eval_response
+        
+    def combine_responses(self, original_query, responses):
+        # Generic logic to combine responses from different agents based on the original query context
+        system_prompt = f"Given the following original query from the user:\n{original_query}\n\n" \
+                        f"And the following responses from agents:\n" \
+                        f"{responses}\n\n" \
+                        f"Please combine these responses into a coherent final answer."
+        combined_response = self.llm.complete(system_prompt)
+        return combined_response
+        
     def eval_response(self, task, agent_name, query, response):
-        system_prompt = f"Given the follow question from the user:\n{task}\n\nThe response from the agent {agent_name} to the query {query} is:\n{response}\n\nPlease evaluate the response in the following format: 'has_error: new_question: explanation'"
+        system_prompt = f"Given the following question from the user:\n{task}\n\nThe response from {agent_name} to the query {query} is:\n{response}\n\nPlease evaluate the response in the following format: 'has_error: new_question: explanation'"
         return self.llm.complete(system_prompt)
-
+    
     def query_agent(self, agent_name, query):
         return self.agents[agent_name].query(query)
-
 
 
 class SimpleAgentWorker(CustomSimpleAgentWorker):

@@ -21,7 +21,7 @@ agents:
   - name: crypto_trader
     role: "Answers questions regarding crypto"
     prompt: "You are a crypto trader expert"
-    tools: get_top_cryptocurrencies_current_data
+    tools: [get_top_cryptocurrencies_current_data, get_forex_exchange_rates]
   - name: trader
     role: "Answers questions regarding trading"
     prompt: "You are a trader expert"
