@@ -4,6 +4,7 @@
 from typing import List
 from llama_index.core.bridge.pydantic import Field, BaseModel
 from llama_index.core.output_parsers import PydanticOutputParser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from typing import Dict, Any, Tuple, Optional
 from datetime import datetime
@@ -18,6 +19,9 @@ class Step(BaseModel):
     agent: str
     subtask: str
     
+class ParallelSteps(BaseModel):
+    steps: List[List[Step]]
+
 class Plan(BaseModel):
     goal: str
     steps: List[Step]
@@ -37,6 +41,23 @@ class Orchestrator:
         self.verbose = kwargs.get("verbose", False)
         self.require_approval = kwargs.get("require_approval", False)
         
+    def decompose_task(self, plan):
+        # This is a placeholder function to decompose the task into steps with dependencies.
+        # It should return a list of lists, where each sublist contains steps that can run in parallel.
+        response_format = PydanticOutputParser(ParallelSteps)
+        prompt = ("Given the User's task:\n\t{task}\n"
+                  "and the simple steps, each to be executed by a specific agent:\n\t{steps}\n"
+                  "Analyze how to sort the tasks enabling parallel runs and by grouping tasks in a common list.\n")
+        prompt = prompt.format(task=plan.goal, steps=plan.steps)
+        response = self.llm.complete(prompt + response_format.format_string)
+        if self.verbose:
+            print(f"Decomposing the task into steps:\n\t{response}")
+        steps = json.loads(str(response))["steps"]
+        sync_steps = [[step] for step in plan.steps]
+        parallel_steps = ParallelSteps(steps=steps)
+        return parallel_steps.steps
+
+        
     def generate_plan(self, prompt, task):
         response_format = PydanticOutputParser(Plan)
         response = self.llm.complete(prompt + response_format.format_string)
@@ -44,6 +65,7 @@ class Orchestrator:
         # Validation check
         if not steps:
             raise ValueError("Generated plan is empty")
+        steps  = [Step(**step) for step in steps]
         plan = Plan(goal=task, steps=steps)
         return plan
     
@@ -62,7 +84,7 @@ class Orchestrator:
         else:
             reason = input("Please provide a reason for disapproving the plan: ")
             return "n", reason
-        
+    
     def query(self, task):
         now = datetime.now()
         agent_list = [(agent["name"], agent["role"]) for agent in self.agents_config["agents"]]
@@ -76,33 +98,67 @@ class Orchestrator:
                 plan = self.generate_plan(pending_approval_prompt, task)
                 approval, reason = self.approve_plan(plan)
         
-        
         if self.verbose:
             print(f"Received the following task: {task}")
             print("Steps:")
             for step in plan.steps:
                 print(f"\t{step.agent}: {step.subtask}")
         responses = []
-        for step in plan.steps:
-            agent_prompt = (
-                "Given the User's task: {task}\n"
-                "And the following query from the orchestrator: {query}\n"
-                "Please provide a response to the query."
-            )
-            if self.verbose:    
-                print(f"Calling agent {step.agent} with the query: {step.subtask}")
-            response = self.query_agent(step.agent, agent_prompt.format(task=plan.goal, query=step.subtask))
-            if self.verbose:
-                print(f"Agent {step.agent} responded with: {response}")
-            responses.append(response)
+        steps = self.decompose_task(plan)  # Decompose the task into a list of lists
+        all_responses = []
+
+        for step_group in steps:
+            responses = self.execute_parallel_steps(step_group, task)
+            all_responses.extend(responses)
             if (self.can_stop(task, responses)):
                 break
-        combined_responses = " ".join(str(responses))
-        combined_response = self.combine_responses(task, combined_responses)
+        
+        combined_response = self.combine_responses(task, all_responses)
         eval_response = self.eval_response(task, "orchestrator", task, combined_response)
+        
         if self.verbose:
             print(f"Response evaluation: {eval_response}")
+        
         return combined_response, eval_response
+
+    def execute_parallel_steps(self, step_group, task):
+        responses = []
+        with ThreadPoolExecutor() as executor:
+            future_to_step = {executor.submit(self.query_agent, step): step for step in step_group}
+            for future in as_completed(future_to_step):
+                step = future_to_step[future]
+                try:
+                    response = future.result()
+                    if self.verbose:
+                        print(f"Step {step} responded with: {response}")
+                    responses.append(response)
+                except Exception as exc:
+                    if self.verbose:
+                        print(f"Step {step} generated an exception: {exc}")
+        return responses
+
+    def query_agent(self, step):
+        agent_name, agent_query = step.agent, step.subtask
+        agent_prompt = (f"Given the User's task and the query from the orchestrator: {agent_query}\n"
+                        "Please provide a response to the query:{agent_query}")
+        return self.agents[agent_name].query(agent_prompt)
+
+    def combine_responses(self, original_query, responses):
+        system_prompt = (
+            f"Given the following original query from the user:\n{original_query}\n\n"
+            f"And the following responses from agents:\n{responses}\n\n"
+            "Please combine these responses into a coherent final answer."
+        )
+        combined_response = self.llm.complete(system_prompt)
+        return combined_response
+
+    def eval_response(self, task, agent_name, query, response):
+        system_prompt = (
+            f"Given the following question from the user:\n{task}\n\n"
+            f"The response from {agent_name} to the query {query} is:\n{response}\n\n"
+            "Please evaluate the response in the following format: 'has_error: new_question: explanation'"
+        )
+        return self.llm.complete(system_prompt)
     
     def can_stop(self, task, responses):
         # Generic logic to determine if the orchestrator can stop querying agents based on the responses so far
@@ -117,24 +173,4 @@ class Orchestrator:
             return True
         return False
     
-    def combine_responses(self, original_query, responses):
-        # Generic logic to combine responses from different agents based on the original query context
-        system_prompt = (
-            f"Given the following original query from the user:\n{original_query}\n\n"
-            f"And the following responses from agents:\n{responses}\n\n"
-            "Please combine these responses into a coherent final answer."
-        )
-        combined_response = self.llm.complete(system_prompt)
-        return combined_response
-        
-    def eval_response(self, task, agent_name, query, response):
-        system_prompt = (
-            f"Given the following question from the user:\n{task}\n\n"
-            f"The response from {agent_name} to the query {query} is:\n{response}\n\n"
-            "Please evaluate the response in the following format: 'has_error: new_question: explanation'"
-        )
-        return self.llm.complete(system_prompt)
     
-    def query_agent(self, agent_name, query):
-        return self.agents[agent_name].query(query)
-
